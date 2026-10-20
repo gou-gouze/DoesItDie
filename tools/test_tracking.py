@@ -41,6 +41,9 @@ local SPELLS = {
     [7] = { "Serpent Sting", "Stings the target, causing 10 Nature damage over 15 sec.  Only one Sting per Hunter can be active on any one target." },
 }
 local function spellNameAndDescription(id) return SPELLS[id][1], SPELLS[id][2] end
+-- Localization hooks (Locale.lua): nil parser + identity canon = the English path these scenarios use.
+local L = nil
+local function canon(name) return name end
 """ + chunk("local UPDATE_INTERVAL", "-- User options") + chunk(
     "local function schoolFromWords", "---------------------------------------------------------------------------\n-- Display") + """
 local api = {}

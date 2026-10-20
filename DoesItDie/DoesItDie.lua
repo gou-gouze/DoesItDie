@@ -168,6 +168,12 @@ local db
 local dotsByTarget = {}     -- targetKey -> { [spellName] = dot }
 local warnedSecretGuid = false
 
+-- Localization (Locale.lua, loaded first). On a non-English client the spell text is translated, so `L` is a
+-- replacement description parser and `canon` maps the client's spell name back to the English name the tables
+-- below are keyed by. Both are no-ops (L nil, canon identity) on enUS, leaving the English path unchanged.
+local L = ns.parser
+local canon = ns.canonicalName or function(name) return name end
+
 ---------------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------------
@@ -249,6 +255,7 @@ end
 -- recognised by "Finishing move", not "combo point".)
 local function parseDot(desc, comboPoints)
     if type(desc) ~= "string" or isSecret(desc) then return nil end
+    if L then return L.parse(desc, comboPoints) end
     if desc:find("Finishing move") then return parseFinisher(desc, comboPoints or 5) end
     -- Weapon enchants (rogue poisons) describe a proc DoT but aren't cast on the target. Match the enchant
     -- wording only: Lacerate's tooltip also mentions "weapon damage".
@@ -368,7 +375,9 @@ local function rememberComboPoints()
 end
 
 local function isFinisherDescription(desc)
-    return type(desc) == "string" and not isSecret(desc) and desc:find("Finishing move") ~= nil
+    if type(desc) ~= "string" or isSecret(desc) then return false end
+    if L then return L.isFinisher(desc) end
+    return desc:find("Finishing move") ~= nil
 end
 
 local function onCastSent(spellID, castGUID)
@@ -501,11 +510,13 @@ local function onPlayerCast(spellID, castGUID)
     local key = castTargetKey(castGUID)
     local ok, name, desc = pcall(spellNameAndDescription, spellID)
     if not ok or not name or isSecret(name) then return end
+    -- English spell name (table key) for the cast spell; the client's own `name` is kept for display.
+    local cname = canon(name)
     if type(desc) == "string" and not isSecret(desc) then
-        local awarded = tonumber(desc:match("Awards (%d+) combo point"))
+        local awarded = L and L.comboAwarded(desc) or tonumber(desc:match("Awards (%d+) combo point"))
         if awarded then onBuilderCast(key, awarded) end
     end
-    if IGNORED_SPELLS[name] then return end
+    if IGNORED_SPELLS[cname] then return end
     local isFinisher = isFinisherDescription(desc)
     local comboPoints, comboSource
     if isFinisher then comboPoints, comboSource = comboPointsForCast() end
@@ -519,8 +530,8 @@ local function onPlayerCast(spellID, castGUID)
     if not key then return end
 
     local now = GetTime()
-    local interval = statedInterval or KNOWN_TICK_INTERVALS[name] or DEFAULT_TICK_INTERVAL
-    school = SCHOOL_BY_NAME[name] or school
+    local interval = statedInterval or KNOWN_TICK_INTERVALS[cname] or DEFAULT_TICK_INTERVAL
+    school = SCHOOL_BY_NAME[cname] or school
     dotsByTarget[key] = dotsByTarget[key] or {}
     local previous = dotsByTarget[key][name]
     dotsByTarget[key][name] = {
@@ -531,8 +542,8 @@ local function onPlayerCast(spellID, castGUID)
         duration = duration,
         interval = interval,
         totalTicks = math.max(1, math.floor(duration / interval + 0.5)),
-        shape = TICK_SHAPES[name],
-        travel = PROJECTILE_DOTS[name] and PROJECTILE_TRAVEL or nil,
+        shape = TICK_SHAPES[cname],
+        travel = PROJECTILE_DOTS[cname] and PROJECTILE_TRAVEL or nil,
         appliedAt = now,
         expiresAt = now + duration,
         nextTickAt = now + interval,

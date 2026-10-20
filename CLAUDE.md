@@ -50,6 +50,7 @@ Consequences for the design:
 | Path | What |
 |---|---|
 | `DoesItDie/DoesItDie.lua` | The addon, in sections: constants and tables, helpers, description parsing, DoT tracking (combo points, cast outcomes, tick matching), display, settings and what `Options.lua` needs (`ns.*`), events, slash commands |
+| `DoesItDie/Locale.lua` | Localization (loaded first). On a non-English client the spell name and description are translated, so this installs a replacement description parser (`ns.parser`) and a French-name→English-name map (`ns.canonicalName`) for the current `GetLocale()`. enUS leaves `ns.parser` nil and `canonicalName` identity, so the English path in `DoesItDie.lua` is unchanged. frFR is built from WoW: Forever's own French tooltips; **unverified on a French client** |
 | `DoesItDie/Options.lua` | The options window: live preview with a mock target frame, tabs, presets, hand-built controls; plus a small page in Options > AddOns that opens it. Shares data with `DoesItDie.lua` through the addon namespace (`local _, ns = ...`) |
 | `DoesItDie/Frames.lua` | Custom target frame (options' Advanced tab): attach the marker and kill icon to another addon's target frame instead of Blizzard's (which unit frame replacements hide). Settings hold frame paths (`GlobalName.key.key`); a Pick mode highlights and takes the frame under the mouse. The marker only needs the bar's rectangle, so the bar must fill left to right and be exactly the fill area. When the attached frame (custom or Blizzard's) isn't visible, the display hides. Unverified in-game |
 | `DoesItDie/Nameplates.lua` | The marker and a small kill icon on every enemy nameplate with your DoTs (per-plate widgets parented to Blizzard's recycled plate frames, fed via `ns.dotBreakdownForUnit`), with their own look settings (`plate*`, since enemy plates are red) and a mock plate in the options preview; plus the `/did plates` probe. Probe verified plates are reachable and anchorable in the open world, in and out of combat; dungeons are untested |
@@ -62,6 +63,7 @@ Consequences for the design:
 | `tools/test_tracking.py` | Plays scripted fights through the real tracking code with game APIs stubbed: tick matching, dodges/misses, recasts, combo points, first-tick waiting. Includes replays of real in-game logs |
 | `tools/test_display.py` | Loads the real display code with mocked frames and checks the per-DoT segments (running totals, colors, dividers, text breakdown) |
 | `tools/test_load.py` | Smoke test: loads every file in the .toc with a fake WoW environment and drives it like a player (load, `/did`, tabs, presets, controls, Simulate fight, close). Catches runtime errors, not visual ones |
+| `tools/test_locale_fr.py` | Loads `Locale.lua` as frFR and runs real WoW: Forever French tooltips through its French parser plus the real English-keyed tables: checks tracked/ignored/not-tracked, schools, finishers, the combo-award phrase and the French→English name map |
 | `WillItDieProbe/` | The original diagnostic addon that established the restrictions above. Not linked into the game any more |
 
 ## How the tracking works (high level)
@@ -100,9 +102,10 @@ Tuning constants (tick windows, tolerances, fallbacks) are at the top of `DoesIt
 - **Slash commands:** `/did` (options window), `/did skull` (5-second kill icon test with geometry logged), `/did line`,
   `/did debug`, `/did reset` (forget learned tick sizes), `/did plates` (nameplate probe, logged), `/did exec [percent]`
   (execute range probe, logged; again to stop).
-- **Tests:** `pip install lupa`, then run the five `tools/test_*.py` scripts (use `--update` on
+- **Tests:** `pip install lupa`, then run the `tools/test_*.py` scripts (use `--update` on
   `test_spellbook.py` only after reviewing a change). There's no Lua install; `luaparser` (pip) works as a
-  syntax check.
+  syntax check. `test_locale_fr.py` runs real Forever **French** tooltips through `Locale.lua`'s French parser
+  plus the real tables, so a break in the French grammar or name map shows up there.
 - **Gotchas:**
   - WoW runs **Lua 5.1**; `lupa` runs 5.5 (loop variables are read-only there, which is fine for 5.1 code too).
   - Bash heredocs in this environment collapse backslashes, which silently breaks texture paths like
@@ -129,6 +132,12 @@ Known limitations:
 - Hunter **Black Arrow** (Forever reuses Classic's "150 Shadow damage and draining 150 mana over 30 sec")
   isn't tracked; its tick behavior is unverified.
 - Healing on the target isn't accounted for (by design).
+- **French client (frFR):** supported through `Locale.lua`, built from Forever's own French tooltips and
+  covered by `test_locale_fr.py`, but **not yet verified in-game**. A few spell names not reachable from the
+  French data source fall back to the standard Classic French name (Nuée d'insectes, Blizzard, Piège
+  immolation / explosif, Piqûre de wyverne) and the Forever-custom Frostfire Bolt name is a guess
+  ("Trait de givrefeu"); all are flagged in `Locale.lua`. Other locales (deDE, esES, …) fall back to the
+  English parser and so only work on an English client.
 
 ## Ideas / next steps
 
